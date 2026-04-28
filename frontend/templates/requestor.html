@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Requestor Portal — Appeal System</title>
+<link rel="stylesheet" href="/static/css/shared.css">
+<style>
+  :root { --accent:#2563eb; --accent-soft:#eff6ff; --accent-border:#bfdbfe; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="topbar-back">← Portal</a>
+  <span class="topbar-brand">Appeal System</span>
+  <span class="topbar-role">📋 Requestor — Alice</span>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="section-title">My Cases</div>
+    <div id="case-list">
+      <div class="empty-state" style="padding:2rem 1rem">
+        <div class="num" style="font-size:3rem">📂</div>
+        <p>No cases yet</p>
+      </div>
+    </div>
+    <div style="margin-top:auto;padding-top:1.5rem">
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="showNewCaseModal()">
+        + Submit New Case
+      </button>
+    </div>
+  </div>
+
+  <div class="main-panel" id="main-panel">
+    <div class="empty-state" style="margin-top:5rem">
+      <div class="num">①</div>
+      <p>Select a case or submit a new one</p>
+      <p class="sub">You have full transparency — view status, decisions, and the complete audit trail for each case</p>
+    </div>
+  </div>
+</div>
+
+<!-- NEW CASE MODAL -->
+<div class="modal-overlay" id="new-case-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Submit New Case</div>
+      <button class="modal-close" onclick="closeModal('new-case-modal')">✕</button>
+    </div>
+    <div class="info-box">
+      <strong>📌 Your Rights (Fairness Principle):</strong>
+      <ul>
+        <li>You will receive a timestamped case ID on submission</li>
+        <li>You will be informed of the decision criteria and deadline</li>
+        <li>You may appeal any decision to the independent Reviewer</li>
+      </ul>
+    </div>
+    <div id="new-case-msg"></div>
+    <div class="form-group">
+      <label>Case Title <span style="color:var(--red)">*</span></label>
+      <input type="text" id="nc-title" placeholder="Brief description of your request">
+    </div>
+    <div class="form-group">
+      <label>Full Description <span style="color:var(--red)">*</span></label>
+      <textarea id="nc-desc" rows="5" placeholder="Provide full details of your request..."></textarea>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="submitCase()">Submit Case</button>
+      <button class="btn btn-outline" onclick="closeModal('new-case-modal')">Cancel</button>
+    </div>
+    <div class="immutable-notice mt-1">
+      <span class="lock">🔒</span>
+      Your submission will be timestamped and locked. It cannot be edited after submission (Evidence Integrity)
+    </div>
+  </div>
+</div>
+
+<!-- APPEAL MODAL -->
+<div class="modal-overlay" id="appeal-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">File an Appeal</div>
+      <button class="modal-close" onclick="closeModal('appeal-modal')">✕</button>
+    </div>
+    <div class="gov-notice">
+      <span>⚖️</span>
+      <span><strong>Role Separation Enforced:</strong> Your appeal is automatically routed to the independent Reviewer. The Authority that made the original decision is <em>completely bypassed</em> and cannot influence or access this stage.</span>
+    </div>
+    <div id="appeal-msg"></div>
+    <div class="form-group">
+      <label>Grounds for Appeal <span style="color:var(--red)">*</span></label>
+      <textarea id="appeal-reason" rows="5" placeholder="Explain clearly why you are contesting the decision. What evidence or reasoning supports your appeal? (minimum 10 characters)"></textarea>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-appeal" onclick="submitAppeal()">⚖️ File Appeal</button>
+      <button class="btn btn-outline" onclick="closeModal('appeal-modal')">Cancel</button>
+    </div>
+    <div class="immutable-notice mt-1">
+      <span class="lock">🔒</span>
+      Appeal reason is timestamped and immutable once submitted
+    </div>
+  </div>
+</div>
+
+<script>
+const USER_ID = 1;
+let cases = [], selectedCaseId = null;
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-User-Id': USER_ID },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Request failed');
+  return data;
+}
+
+function fmt(dt) {
+  if (!dt) return '—';
+  return new Date(dt + 'Z').toLocaleString('en-GB', {
+    day:'2-digit', month:'short', year:'numeric',
+    hour:'2-digit', minute:'2-digit'
+  });
+}
+
+function badge(status) {
+  return `<span class="badge badge-${status}">${status.replace(/_/g,' ')}</span>`;
+}
+
+async function loadCases() {
+  try {
+    cases = await api('GET', '/cases');
+    renderCaseList();
+    if (selectedCaseId) loadCaseDetail(selectedCaseId);
+  } catch(e) { console.error(e); }
+}
+
+function renderCaseList() {
+  const el = document.getElementById('case-list');
+  if (!cases.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:2rem 1rem"><div class="num" style="font-size:3rem">📂</div><p>No cases yet</p></div>';
+    return;
+  }
+  el.innerHTML = cases.map(c => `
+    <div class="card ${c.id === selectedCaseId ? 'active' : ''}" onclick="loadCaseDetail(${c.id})">
+      <div class="card-header">
+        <div style="flex:1;min-width:0">
+          <div class="card-id">#${c.id} · ${fmt(c.created_at)}</div>
+          <div class="card-title">${c.title}</div>
+        </div>
+        ${badge(c.status)}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadCaseDetail(caseId) {
+  selectedCaseId = caseId;
+  renderCaseList();
+  document.getElementById('main-panel').innerHTML = '<div class="empty-state"><div class="num" style="font-size:2rem">⏳</div><p>Loading…</p></div>';
+  try {
+    const c = await api('GET', `/cases/${caseId}`);
+    renderDetail(c);
+  } catch(e) {
+    document.getElementById('main-panel').innerHTML = `<div class="alert alert-error">⚠ ${e.message}</div>`;
+  }
+}
+
+function renderDetail(c) {
+  const authDec = c.decisions.find(d => d.actor_role === 'authority');
+  const revDec  = c.decisions.find(d => d.actor_role === 'reviewer');
+  const appeal  = c.appeals[0];
+
+  let actionsHtml = '';
+  if (c.status === 'DECIDED' && authDec) {
+    actionsHtml = `
+      <div class="section-title mt-2">Your Options</div>
+      <div class="info-box">
+        <strong>📌 Transparency Notice:</strong> The Authority has reached a decision. You may accept it (closes the case) or appeal to the independent Reviewer. The appeal criteria are: new evidence, procedural error, or reasoning that was not considered.
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-accept" onclick="acceptDecision(${c.id})">✓ Accept &amp; Close Case</button>
+        <button class="btn btn-appeal" onclick="showAppealModal(${c.id})">⚖️ File Appeal to Reviewer</button>
+      </div>
+    `;
+  }
+
+  const isFinalized = c.status === 'FINALIZED';
+
+  document.getElementById('main-panel').innerHTML = `
+    <div class="detail-header">
+      <div class="detail-meta">
+        <span class="meta-item">📁 Case #${c.id}</span>
+        ${badge(c.status)}
+        <span class="meta-item">📅 Submitted ${fmt(c.created_at)}</span>
+        ${c.deadline ? `<span class="meta-item deadline-warn">⏱ Decision deadline: ${fmt(c.deadline)}</span>` : ''}
+        ${isFinalized ? `<span class="archive-tag">🗄 Archived — Retained for audit</span>` : ''}
+      </div>
+      <div class="detail-title">${c.title}</div>
+    </div>
+
+    <div class="section-title">Your Request</div>
+    <div class="desc-block">${c.description}</div>
+    <div class="immutable-notice" style="margin-bottom:1.5rem">
+      <span class="lock">🔒</span> Submission locked and timestamped — evidence integrity protected
+    </div>
+
+    ${authDec ? `
+      <div class="section-title">Authority's Decision</div>
+      <div class="principle-bar">
+        <span class="principle-tag transparency">Transparency</span>
+        You are entitled to see the full reasoning behind any decision
+      </div>
+      <div class="decision-box ${authDec.decision}">
+        <div class="decision-label">Initial Decision · ${fmt(authDec.timestamp)}</div>
+        <div class="decision-verdict ${authDec.decision}">${authDec.decision.toUpperCase()}</div>
+        <div class="decision-justification">${authDec.justification}</div>
+      </div>
+    ` : c.status === 'UNDER_REVIEW' ? `
+      <div class="alert alert-info">ℹ️ Your case is currently under review by the Authority. You will see the decision here once it is made.</div>
+    ` : ''}
+
+    ${appeal ? `
+      <div class="section-title">Your Appeal</div>
+      <div class="decision-box appeal-box">
+        <div class="decision-label">📨 Appeal Filed · ${fmt(appeal.timestamp)} · Auto-routed to Reviewer</div>
+        <div class="decision-justification">${appeal.reason}</div>
+      </div>
+    ` : ''}
+
+    ${revDec ? `
+      <div class="section-title">Final Decision — Reviewer</div>
+      <div class="decision-box final">
+        <div class="decision-label">⚖️ Final &amp; Binding · ${fmt(revDec.timestamp)}</div>
+        <div class="decision-verdict final">${revDec.decision.toUpperCase()} — FINAL</div>
+        <div class="decision-justification">${revDec.justification}</div>
+      </div>
+    ` : ''}
+
+    ${actionsHtml}
+
+    <div class="section-title mt-3">Audit Trail</div>
+    <div class="principle-bar">
+      <span class="principle-tag accountability">Accountability</span>
+      Every action is timestamped, attributed, and permanently logged
+    </div>
+    <div class="timeline">
+      ${c.audit_logs.map(log => `
+        <div class="timeline-item">
+          <div class="tl-line"><div class="tl-dot"></div><div class="tl-connector"></div></div>
+          <div class="tl-content">
+            <div class="tl-action">${log.action}</div>
+            <div class="tl-actor">${log.actor} · ${fmt(log.timestamp)}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function showNewCaseModal() {
+  document.getElementById('new-case-msg').innerHTML = '';
+  document.getElementById('nc-title').value = '';
+  document.getElementById('nc-desc').value = '';
+  document.getElementById('new-case-modal').classList.add('active');
+}
+
+async function submitCase() {
+  const title = document.getElementById('nc-title').value.trim();
+  const description = document.getElementById('nc-desc').value.trim();
+  const msg = document.getElementById('new-case-msg');
+  if (!title || !description) {
+    msg.innerHTML = '<div class="alert alert-error">⚠ Title and description are both required.</div>';
+    return;
+  }
+  try {
+    const c = await api('POST', '/cases', { title, description });
+    closeModal('new-case-modal');
+    await loadCases();
+    loadCaseDetail(c.id);
+  } catch(e) {
+    msg.innerHTML = `<div class="alert alert-error">⚠ ${e.message}</div>`;
+  }
+}
+
+async function acceptDecision(caseId) {
+  if (!confirm('Accept the Authority\'s decision? This will close and archive the case.')) return;
+  try {
+    await api('POST', `/cases/${caseId}/accept`);
+    await loadCases();
+    loadCaseDetail(caseId);
+  } catch(e) { alert(e.message); }
+}
+
+let appealCaseId = null;
+function showAppealModal(caseId) {
+  appealCaseId = caseId;
+  document.getElementById('appeal-reason').value = '';
+  document.getElementById('appeal-msg').innerHTML = '';
+  document.getElementById('appeal-modal').classList.add('active');
+}
+
+async function submitAppeal() {
+  const reason = document.getElementById('appeal-reason').value.trim();
+  const msg = document.getElementById('appeal-msg');
+  if (reason.length < 10) {
+    msg.innerHTML = '<div class="alert alert-error">⚠ Please provide a more detailed reason (minimum 10 characters).</div>';
+    return;
+  }
+  try {
+    await api('POST', '/appeals', { case_id: appealCaseId, reason });
+    closeModal('appeal-modal');
+    await loadCases();
+    loadCaseDetail(appealCaseId);
+  } catch(e) {
+    msg.innerHTML = `<div class="alert alert-error">⚠ ${e.message}</div>`;
+  }
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+loadCases();
+setInterval(loadCases, 15000);
+</script>
+</body>
+</html>
