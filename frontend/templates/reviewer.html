@@ -262,7 +262,24 @@ async function submitFinal(verdict) {
 }
 
 loadCases();
-setInterval(loadCases, 15000);
+//setInterval(loadCases, 15000);
+
+
+//stop refreshing when user is interacting with the case detail
+
+  let refreshInterval = setInterval(loadCases, 15000);
+
+  document.addEventListener('focusin', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      clearInterval(refreshInterval);
+    }
+  });
+
+  document.addEventListener('focusout', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      refreshInterval = setInterval(loadCases, 15000);
+    }
+  });
 </script>
 </body>
 </html>

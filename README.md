@@ -24,42 +24,7 @@ appeal_system/
             └── shared.css
 ```
 
-## Quick Start
 
-### 1. Install dependencies
-
-```bash
-cd appeal_system/backend
-pip install -r requirements.txt
-```
-
-### 2. Run the server
-
-```bash
-cd appeal_system/backend
-uvicorn main:app --reload --port 8000
-```
-
-### 3. Open the app
-
-- **Portal**: http://localhost:8000/
-- **Requestor**: http://localhost:8000/requestor
-- **Authority**: http://localhost:8000/authority
-- **Reviewer**: http://localhost:8000/reviewer
-
----
-
-## Demo Users (auto-seeded)
-
-| ID | Name            | Role      |
-|----|-----------------|-----------|
-| 1  | Alice Requestor | requestor |
-| 2  | Bob Authority   | authority |
-| 3  | Carol Reviewer  | reviewer  |
-
-Authentication is simulated via `X-User-Id` header (set automatically by the UI).
-
----
 
 ## Workflow
 
@@ -107,3 +72,9 @@ If Authority misses the 7-day deadline, the system auto-escalates to ESCALATED s
 | POST | /cases/{id}/accept | Requestor | Accept decision |
 | GET | /audit/{id} | All | Get audit log |
 | GET | /users | All | List users |
+
+
+
+
+
+
